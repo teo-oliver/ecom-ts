@@ -1,0 +1,64 @@
+const fs = require('fs');
+const crypto = require('crypto');
+const util = require('util');
+const Repository = require('./repository');
+
+const scrypt = util.promisify(crypto.scrypt);
+
+class UsersRepository extends Repository {
+  async create(attrs) {
+    // attrs: {email: string, password: string}
+    attrs.id = this.randomId();
+
+    const salt = crypto.randomBytes(8).toString('hex');
+
+    const buf = await scrypt(attrs.password, salt, 64);
+
+    const records = await this.getAll();
+
+    const record = {
+      ...attrs,
+      password: `${buf.toString('hex')}.${salt}`
+    };
+    records.push(record);
+
+    await this.writeAll(records);
+
+    return record;
+  }
+
+  async comparePasswords(saved, supplied) {
+    // Saved -> password saved in our database. 'hashed.salt'accordion
+    // Supplied -> password given to us by a user trying to sign in
+
+    const [hashed, salt] = saved.split('.');
+
+    const hashedSuppliedBuf = await scrypt(supplied, salt, 64);
+
+    return hashed === hashedSuppliedBuf.toString('hex');
+  }
+}
+
+module.exports = new UsersRepository('users.json');
+
+// ###### TESTS #######
+
+// const test = async () => {
+//   const repo = new UsersRepository('users.json');
+
+// await repo.create({ name: 'test@test.com', password: 'password' });
+
+// const users = await repo.getAll();
+
+// const user = await repo.getOne('017234521');
+
+// await repo.delete('bed5fdd7');
+
+// await repo.update('239aec32', { update: 'hello22' });
+
+// const user = await repo.getOneBy({ name: 'test@test.com', id: '239aec32' });
+
+//   console.log(user);
+// };
+
+// test();
